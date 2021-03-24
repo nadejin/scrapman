@@ -24,8 +24,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("{}\n\n", serde_yaml::to_string(&pipeline)?);
 
     let scrapman = Scrapman::new("http://localhost:4444");
-    let result = scrapman.execute(pipeline).await;
-    println!("{:?}", result);
+    if let Err(error) = scrapman.execute(pipeline).await {
+        println!("Error: {}", error);
+    }
 
     Ok(())
 }

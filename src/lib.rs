@@ -1,12 +1,12 @@
 mod pipeline;
 mod value;
 
-pub use pipeline::{Pipeline, PipelineBuilder, PipelineStage, Selector};
+pub use pipeline::{ElementSearchScope, Pipeline, PipelineBuilder, PipelineExecutionError, PipelineStage, Selector};
 pub use value::{JsonValue, Value};
 
 use fantoccini::{elements::Element, Client, ClientBuilder};
 use serde_json::json;
-use std::{error::Error, mem::swap};
+use std::mem::swap;
 
 pub struct Scrapman {
     webdriver_url: String,
@@ -35,11 +35,15 @@ impl Scrapman {
         }
     }
 
-    pub async fn execute(&self, pipeline: Pipeline) -> Result<(), Box<dyn Error>> {
-        let mut client = ClientBuilder::native().connect(&self.webdriver_url).await?;
-        let mut context = ScrapeContext::default();
-        let mut result = Ok(());
+    pub async fn execute(&self, pipeline: Pipeline) -> Result<(), PipelineExecutionError> {
+        let mut client = ClientBuilder::native()
+            .connect(&self.webdriver_url)
+            .await
+            .map_err(PipelineExecutionError::WebdriverConnectionError)?;
 
+        let mut context = ScrapeContext::default();
+
+        let mut result = Ok(());
         for stage in pipeline.into_iter() {
             result = self.execute_stage(stage, &mut client, &mut context).await;
             if result.is_err() {
@@ -47,10 +51,16 @@ impl Scrapman {
             }
         }
 
-        // std::thread::sleep(std::time::Duration::from_secs(5));
+        client
+            .close_window()
+            .await
+            .map_err(PipelineExecutionError::WebdriverCommandError)?;
 
-        client.close_window().await?;
-        client.close().await?;
+        client
+            .close()
+            .await
+            .map_err(PipelineExecutionError::WebdriverCommandError)?;
+
         result
     }
 
@@ -59,39 +69,55 @@ impl Scrapman {
         stage: PipelineStage,
         client: &mut Client,
         context: &mut ScrapeContext,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), PipelineExecutionError> {
         match stage {
             PipelineStage::OpenUrl { url } => match url.resolve(&context) {
-                Some(url) => client.goto(&url).await.map_err(Into::into),
-                None => Err("Missing url to open".into()),
+                Some(url) => client
+                    .goto(&url)
+                    .await
+                    .map_err(PipelineExecutionError::WebdriverCommandError),
+
+                None => Err(PipelineExecutionError::ValueResolveError),
             },
 
-            PipelineStage::FindElement { selector } => match selector.get_locator(&context) {
-                Some(locator) => client
-                    .find(locator)
-                    .await
-                    .map_err(Into::into)
-                    .and_then(|element| Ok(context.element = Some(element))),
+            PipelineStage::FindElement { selector, scope } => match selector.get_locator(&context) {
+                Some(locator) => match scope {
+                    ElementSearchScope::Global => client
+                        .find(locator)
+                        .await
+                        .map_err(PipelineExecutionError::WebdriverCommandError)
+                        .and_then(|element| Ok(context.element = Some(element))),
 
-                None => Err("Missing element selector".into()),
+                    _ => Err(PipelineExecutionError::MissingElementLocator), // TODO support all locators
+                },
+
+                None => Err(PipelineExecutionError::MissingElementLocator),
             },
 
             PipelineStage::FillElement { value } => {
                 let value = value
                     .resolve(&context)
-                    .ok_or("Missing value to fill the element")?
+                    .ok_or(PipelineExecutionError::ValueResolveError)?
                     .to_owned();
 
                 if let Some(ref mut element) = context.element {
-                    element.send_keys(&value).await.map_err(Into::into)
+                    element
+                        .send_keys(&value)
+                        .await
+                        .map_err(PipelineExecutionError::WebdriverCommandError)
                 } else {
-                    Err("Missing active element to fill in the current context".into())
+                    Err(PipelineExecutionError::MissingCurrentElement)
                 }
             }
 
             PipelineStage::ClickElement => match context.element.take() {
-                Some(element) => element.click().await.map_err(Into::into).map(|_| ()),
-                None => Err("".into()),
+                Some(element) => element
+                    .click()
+                    .await
+                    .map_err(PipelineExecutionError::WebdriverCommandError)
+                    .map(|_| ()),
+
+                None => Err(PipelineExecutionError::MissingCurrentElement),
             },
 
             PipelineStage::StoreModel => {
@@ -101,7 +127,7 @@ impl Scrapman {
                 Ok(())
             }
 
-            _ => Err(format!("Missing executor for pipeline stage {:?}", stage).into()),
+            _ => Err(PipelineExecutionError::MissingStageExecutor(stage)),
         }
     }
 }

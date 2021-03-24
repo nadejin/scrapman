@@ -1,6 +1,10 @@
 use crate::{value::Value, ScrapeContext};
-use fantoccini::Locator;
+use fantoccini::{
+    error::{CmdError, NewSessionError},
+    Locator,
+};
 use serde::{Deserialize, Serialize};
+use std::{error::Error, fmt};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Selector {
@@ -19,17 +23,52 @@ impl Selector {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub enum ElementSearchScope {
+    Global,
+    Scoped,
+    Current,
+}
+
 pub type Pipeline = Vec<PipelineStage>;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum PipelineStage {
-    OpenUrl { url: Value },
-    FindElement { selector: Selector },
-    FindElements { selector: Selector, execute: Pipeline },
-    FillElement { value: Value },
+    OpenUrl {
+        url: Value,
+    },
+    FindElement {
+        selector: Selector,
+        scope: ElementSearchScope,
+    },
+    FindElements {
+        selector: Selector,
+        execute: Pipeline,
+        scope: ElementSearchScope,
+    },
+    FillElement {
+        value: Value,
+    },
     ClickElement,
     StoreModel,
-    SetModelAttribute { attribute: String, value: Value },
+    SetModelAttribute {
+        attribute: String,
+        value: Value,
+    },
+}
+
+impl fmt::Display for PipelineStage {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PipelineStage::OpenUrl { .. } => write!(fmt, "OpenUrl"),
+            PipelineStage::FindElement { .. } => write!(fmt, "FindElement"),
+            PipelineStage::FindElements { .. } => write!(fmt, "FindElements"),
+            PipelineStage::FillElement { .. } => write!(fmt, "FillElement"),
+            PipelineStage::ClickElement => write!(fmt, "ClickElement"),
+            PipelineStage::StoreModel => write!(fmt, "StoreModel"),
+            PipelineStage::SetModelAttribute { attribute, .. } => write!(fmt, "SetModelAttribute({})", attribute),
+        }
+    }
 }
 
 pub struct PipelineBuilder {
@@ -47,12 +86,20 @@ impl PipelineBuilder {
     }
 
     pub fn find_element(mut self, selector: Selector) -> Self {
-        self.pipeline.push(PipelineStage::FindElement { selector });
+        self.pipeline.push(PipelineStage::FindElement {
+            selector,
+            scope: ElementSearchScope::Global,
+        });
+
         self
     }
 
     pub fn find_elements(mut self, selector: Selector, execute: Pipeline) -> Self {
-        self.pipeline.push(PipelineStage::FindElements { selector, execute });
+        self.pipeline.push(PipelineStage::FindElements {
+            selector,
+            execute,
+            scope: ElementSearchScope::Global,
+        });
 
         self
     }
@@ -85,3 +132,45 @@ impl PipelineBuilder {
         self.pipeline
     }
 }
+
+#[derive(Debug)]
+pub enum PipelineExecutionError {
+    MissingElementLocator,
+    MissingCurrentElement,
+    MissingStageExecutor(PipelineStage),
+    ValueResolveError,
+    WebdriverConnectionError(NewSessionError),
+    WebdriverCommandError(CmdError),
+}
+
+impl fmt::Display for PipelineExecutionError {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PipelineExecutionError::MissingElementLocator => {
+                write!(fmt, "missing element locator")
+            }
+
+            PipelineExecutionError::MissingCurrentElement => {
+                write!(fmt, "current element is missing in the pipeline execution context")
+            }
+
+            PipelineExecutionError::MissingStageExecutor(stage) => {
+                write!(fmt, "missing pipeline executor for stage {}", stage)
+            }
+
+            PipelineExecutionError::ValueResolveError => {
+                write!(fmt, "failed to resolve value")
+            }
+
+            PipelineExecutionError::WebdriverConnectionError(error) => {
+                write!(fmt, "webdriver connection error: {}", error)
+            }
+
+            PipelineExecutionError::WebdriverCommandError(error) => {
+                write!(fmt, "webdriver command error: {}", error)
+            }
+        }
+    }
+}
+
+impl Error for PipelineExecutionError {}
