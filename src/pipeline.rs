@@ -1,4 +1,4 @@
-use crate::{value::Value, ScrapeContext};
+use crate::value::Value;
 use fantoccini::{
     error::{CmdError, NewSessionError},
     Locator,
@@ -8,17 +8,17 @@ use std::{error::Error, fmt};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Selector {
-    Css(Value),
-    Id(Value),
-    LinkText(Value),
+    Css,
+    Id,
+    LinkText,
 }
 
 impl Selector {
-    pub fn get_locator<'a>(&'a self, context: &'a ScrapeContext) -> Option<Locator<'a>> {
+    pub fn get_locator<'a>(&'a self, query: &'a str) -> Locator<'a> {
         match self {
-            Selector::Css(value) => value.resolve(context).map(Locator::Css),
-            Selector::Id(value) => value.resolve(context).map(Locator::Id),
-            Selector::LinkText(value) => value.resolve(context).map(Locator::LinkText),
+            Selector::Css => Locator::Css(query),
+            Selector::Id => Locator::Id(query),
+            Selector::LinkText => Locator::LinkText(query),
         }
     }
 }
@@ -39,12 +39,14 @@ pub enum PipelineStage {
     },
     FindElement {
         selector: Selector,
+        query: Value,
         scope: ElementSearchScope,
     },
     FindElements {
         selector: Selector,
-        execute: Pipeline,
+        query: Value,
         scope: ElementSearchScope,
+        execute: Pipeline,
     },
     FillElement {
         value: Value,
@@ -85,18 +87,20 @@ impl PipelineBuilder {
         self
     }
 
-    pub fn find_element(mut self, selector: Selector) -> Self {
+    pub fn find_element(mut self, selector: Selector, query: Value) -> Self {
         self.pipeline.push(PipelineStage::FindElement {
             selector,
+            query,
             scope: ElementSearchScope::Global,
         });
 
         self
     }
 
-    pub fn find_elements(mut self, selector: Selector, execute: Pipeline) -> Self {
+    pub fn find_elements(mut self, selector: Selector, query: Value, execute: Pipeline) -> Self {
         self.pipeline.push(PipelineStage::FindElements {
             selector,
+            query,
             execute,
             scope: ElementSearchScope::Global,
         });
@@ -135,10 +139,10 @@ impl PipelineBuilder {
 
 #[derive(Debug)]
 pub enum PipelineExecutionError {
+    ValueResolveError,
     MissingElementLocator,
     MissingCurrentElement,
     MissingStageExecutor(PipelineStage),
-    ValueResolveError,
     WebdriverConnectionError(NewSessionError),
     WebdriverCommandError(CmdError),
 }
@@ -146,6 +150,10 @@ pub enum PipelineExecutionError {
 impl fmt::Display for PipelineExecutionError {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            PipelineExecutionError::ValueResolveError => {
+                write!(fmt, "failed to resolve value")
+            }
+
             PipelineExecutionError::MissingElementLocator => {
                 write!(fmt, "missing element locator")
             }
@@ -156,10 +164,6 @@ impl fmt::Display for PipelineExecutionError {
 
             PipelineExecutionError::MissingStageExecutor(stage) => {
                 write!(fmt, "missing pipeline executor for stage {}", stage)
-            }
-
-            PipelineExecutionError::ValueResolveError => {
-                write!(fmt, "failed to resolve value")
             }
 
             PipelineExecutionError::WebdriverConnectionError(error) => {

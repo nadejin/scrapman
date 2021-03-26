@@ -1,31 +1,17 @@
+mod context;
 mod pipeline;
 mod value;
 
+pub use context::ScrapeContext;
 pub use pipeline::{ElementSearchScope, Pipeline, PipelineBuilder, PipelineExecutionError, PipelineStage, Selector};
 pub use value::{JsonValue, Value};
 
-use fantoccini::{elements::Element, Client, ClientBuilder};
+use fantoccini::{Client, ClientBuilder};
 use serde_json::json;
 use std::mem::swap;
 
 pub struct Scrapman {
     webdriver_url: String,
-}
-
-pub struct ScrapeContext {
-    pub element: Option<Element>,
-    pub model: JsonValue,
-    pub models: Vec<JsonValue>,
-}
-
-impl Default for ScrapeContext {
-    fn default() -> Self {
-        ScrapeContext {
-            element: None,
-            model: json!({}),
-            models: Vec::new(),
-        }
-    }
 }
 
 impl Scrapman {
@@ -35,21 +21,22 @@ impl Scrapman {
         }
     }
 
-    pub async fn execute(&self, pipeline: Pipeline) -> Result<(), PipelineExecutionError> {
+    pub async fn launch<T: Into<Option<JsonValue>>>(
+        &self,
+        pipeline: Pipeline,
+        values: T,
+    ) -> Result<(), PipelineExecutionError> {
         let mut client = ClientBuilder::native()
             .connect(&self.webdriver_url)
             .await
             .map_err(PipelineExecutionError::WebdriverConnectionError)?;
 
-        let mut context = ScrapeContext::default();
+        let mut context = match values.into() {
+            Some(values) => ScrapeContext::with_values(values),
+            None => ScrapeContext::default(),
+        };
 
-        let mut result = Ok(());
-        for stage in pipeline.into_iter() {
-            result = self.execute_stage(stage, &mut client, &mut context).await;
-            if result.is_err() {
-                break;
-            }
-        }
+        let result = self.execute_pipeline(pipeline, &mut client, &mut context).await;
 
         client
             .close_window()
@@ -64,7 +51,24 @@ impl Scrapman {
         result
     }
 
-    async fn execute_stage(
+    async fn execute_pipeline(
+        &self,
+        pipeline: Pipeline,
+        mut client: &mut Client,
+        mut context: &mut ScrapeContext,
+    ) -> Result<(), PipelineExecutionError> {
+        let mut result = Ok(());
+        for stage in pipeline.into_iter() {
+            result = self.execute_pipeline_stage(stage, &mut client, &mut context).await;
+            if result.is_err() {
+                break;
+            }
+        }
+
+        result
+    }
+
+    async fn execute_pipeline_stage(
         &self,
         stage: PipelineStage,
         client: &mut Client,
@@ -80,27 +84,28 @@ impl Scrapman {
                 None => Err(PipelineExecutionError::ValueResolveError),
             },
 
-            PipelineStage::FindElement { selector, scope } => match selector.get_locator(&context) {
-                Some(locator) => match scope {
+            PipelineStage::FindElement { selector, query, scope } => {
+                let query = query
+                    .resolve(&context)
+                    .ok_or(PipelineExecutionError::MissingElementLocator)?;
+
+                match scope {
                     ElementSearchScope::Global => client
-                        .find(locator)
+                        .find(selector.get_locator(&query))
                         .await
                         .map_err(PipelineExecutionError::WebdriverCommandError)
-                        .and_then(|element| Ok(context.element = Some(element))),
+                        .and_then(|element| Ok(context.current_element = Some(element))),
 
                     _ => Err(PipelineExecutionError::MissingElementLocator), // TODO support all locators
-                },
-
-                None => Err(PipelineExecutionError::MissingElementLocator),
-            },
+                }
+            }
 
             PipelineStage::FillElement { value } => {
                 let value = value
                     .resolve(&context)
-                    .ok_or(PipelineExecutionError::ValueResolveError)?
-                    .to_owned();
+                    .ok_or(PipelineExecutionError::ValueResolveError)?;
 
-                if let Some(ref mut element) = context.element {
+                if let Some(ref mut element) = context.current_element {
                     element
                         .send_keys(&value)
                         .await
@@ -110,7 +115,7 @@ impl Scrapman {
                 }
             }
 
-            PipelineStage::ClickElement => match context.element.take() {
+            PipelineStage::ClickElement => match context.current_element.take() {
                 Some(element) => element
                     .click()
                     .await
