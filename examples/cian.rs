@@ -1,4 +1,4 @@
-use scrapman::{JsonValue, PipelineBuilder, Scrapman, Selector, Value};
+use scrapman::{ElementSearchScope, JsonValue, PipelineBuilder, Scrapman, Selector, Value};
 use std::{error::Error, fs::read_to_string};
 
 #[tokio::main]
@@ -15,9 +15,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Selector::Css,
             Value::context("selectors.card"),
             PipelineBuilder::new()
-                .find_element(Selector::Css, Value::context("selectors.title"))
+                .find_element_in(
+                    Selector::Css,
+                    Value::context("selectors.title"),
+                    ElementSearchScope::Scoped,
+                )
                 .set_model_attribute("title", Value::CurrentElementText)
-                .find_element(Selector::Css, Value::constant("selectors.price"))
+                .find_element_in(
+                    Selector::Css,
+                    Value::context("selectors.price"),
+                    ElementSearchScope::Scoped,
+                )
                 .set_model_attribute("price", Value::CurrentElementText)
                 .store_model()
                 .build(),
@@ -27,9 +35,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("{}\n\n", serde_yaml::to_string(&pipeline)?);
 
     let scrapman = Scrapman::new("http://localhost:4444");
-    if let Err(error) = scrapman.launch(pipeline, values).await {
-        println!("Error: {}", error);
-    }
+
+    match scrapman.launch(pipeline, values).await {
+        Ok(scraped) => println!("Scraped data:\n{}", serde_yaml::to_string(&scraped)?),
+        Err(error) => println!("Error: {}", error),
+    };
 
     Ok(())
 }

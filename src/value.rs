@@ -1,24 +1,32 @@
-use crate::ScrapeContext;
+use crate::pipeline::{PipelineExecutionContext, PipelineExecutionError};
+use fantoccini::elements::Element;
+use json_dotpath::DotPaths;
 use serde::{Deserialize, Serialize};
 
 pub type JsonValue = serde_json::Value;
 
-const KEY_SEPARATOR: &'static str = ".";
-
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Value {
     Constant(String),
     Context(String),
     CurrentElementText,
-    ScopeElementText,
+    ScopedElementText,
 }
 
 impl Value {
-    pub fn resolve(&self, ctx: &ScrapeContext) -> Option<String> {
+    pub async fn resolve(&self, context: &mut PipelineExecutionContext) -> Result<String, PipelineExecutionError> {
         match self {
-            Value::Constant(value) => Some(value.clone()),
-            Value::Context(key) => get_value_by_key(&ctx.values, key),
-            _ => None,
+            Value::Constant(value) => Ok(value.clone()),
+
+            Value::Context(key) => context
+                .values
+                .dot_get::<JsonValue>(&key)
+                .map_err(|_| PipelineExecutionError::ValueResolveError)
+                .and_then(to_string),
+
+            Value::CurrentElementText => get_text(&mut context.current_element).await,
+
+            Value::ScopedElementText => get_text(&mut context.scoped_element).await,
         }
     }
 
@@ -31,77 +39,21 @@ impl Value {
     }
 }
 
-fn get_value_by_key(value: &serde_json::Value, key: &str) -> Option<String> {
-    let mut split = key.split(KEY_SEPARATOR);
-    let head = split.next()?;
-    let tail = split.collect::<Vec<&str>>().join(KEY_SEPARATOR);
-
+fn to_string(value: Option<serde_json::Value>) -> Result<String, PipelineExecutionError> {
     match value {
-        serde_json::Value::Object(object) => object.get(head).and_then(|value| {
-            if tail.len() > 0 {
-                get_value_by_key(value, &tail)
-            } else {
-                Some(value_to_string(value))
-            }
-        }),
-
-        serde_json::Value::Array(array) => {
-            let idx = head.parse::<usize>().ok()?;
-            array.get(idx).and_then(|item| {
-                if tail.len() > 0 {
-                    get_value_by_key(item, &tail)
-                } else {
-                    Some(value_to_string(value))
-                }
-            })
-        }
-
-        _ => None,
+        Some(serde_json::Value::String(value)) => Ok(value.clone()),
+        Some(value) => Ok(value.to_string()),
+        _ => Err(PipelineExecutionError::ValueResolveError),
     }
 }
 
-fn value_to_string(value: &serde_json::Value) -> String {
-    match value {
-        serde_json::Value::String(value) => value.clone(),
-        _ => value.to_string(),
-    }
-}
-
-#[cfg(test)]
-mod test {
-
-    use serde_json::json;
-
-    #[test]
-    fn test_get_value_by_key() {
-        use super::get_value_by_key;
-
-        let value = json!({
-            "key": "value",
-            "nested": {
-                "key": "value"
-            },
-            "array": [
-                { "key": "value" },
-                { "key": "value" },
-            ],
-            "number": 123,
-            "bool": false,
-            "null": null,
-        });
-
-        let expected = Some(String::from("value"));
-
-        assert_eq!(expected, get_value_by_key(&value, "key"));
-        assert_eq!(expected, get_value_by_key(&value, "nested.key"));
-        assert_eq!(None, get_value_by_key(&value, "missing.key"));
-
-        assert_eq!(expected, get_value_by_key(&value, "array.0.key"));
-        assert_eq!(expected, get_value_by_key(&value, "array.1.key"));
-        assert_eq!(None, get_value_by_key(&value, "array.2.key"));
-
-        assert_eq!(Some(String::from("123")), get_value_by_key(&value, "number"));
-        assert_eq!(Some(String::from("false")), get_value_by_key(&value, "bool"));
-        assert_eq!(Some(String::from("null")), get_value_by_key(&value, "null"));
+async fn get_text(element: &mut Option<Element>) -> Result<String, PipelineExecutionError> {
+    if let Some(ref mut element) = element {
+        element
+            .text()
+            .await
+            .map_err(PipelineExecutionError::WebdriverCommandError)
+    } else {
+        Err(PipelineExecutionError::MissingContextElement)
     }
 }

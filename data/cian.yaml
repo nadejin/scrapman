@@ -1,9 +1,9 @@
 start_url: https://cian.ru
 search:
   input_id: geo-suggest-input
-  query: Бориса Панина
+  query: Советская
   button_text: Найти
 selectors:
-  card: article[data-name=\"CardComponent\"]
-  title: div[data-name=\"TitleComponent\"]
-  price: span[data-mark=\"MainPrice\"]
+  card: article[data-name="CardComponent"]
+  title: div[data-name="TitleComponent"]
+  price: span[data-mark="MainPrice"]

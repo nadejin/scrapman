@@ -1,12 +1,14 @@
-use crate::value::Value;
+use crate::value::{JsonValue, Value};
 use fantoccini::{
+    elements::Element,
     error::{CmdError, NewSessionError},
     Locator,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::{error::Error, fmt};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 pub enum Selector {
     Css,
     Id,
@@ -23,7 +25,7 @@ impl Selector {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
 pub enum ElementSearchScope {
     Global,
     Scoped,
@@ -32,21 +34,16 @@ pub enum ElementSearchScope {
 
 pub type Pipeline = Vec<PipelineStage>;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PipelineStage {
     OpenUrl {
         url: Value,
     },
-    FindElement {
+    QueryElement {
         selector: Selector,
         query: Value,
         scope: ElementSearchScope,
-    },
-    FindElements {
-        selector: Selector,
-        query: Value,
-        scope: ElementSearchScope,
-        execute: Pipeline,
+        execute: Option<Pipeline>,
     },
     FillElement {
         value: Value,
@@ -63,8 +60,7 @@ impl fmt::Display for PipelineStage {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match self {
             PipelineStage::OpenUrl { .. } => write!(fmt, "OpenUrl"),
-            PipelineStage::FindElement { .. } => write!(fmt, "FindElement"),
-            PipelineStage::FindElements { .. } => write!(fmt, "FindElements"),
+            PipelineStage::QueryElement { .. } => write!(fmt, "QueryElement"),
             PipelineStage::FillElement { .. } => write!(fmt, "FillElement"),
             PipelineStage::ClickElement => write!(fmt, "ClickElement"),
             PipelineStage::StoreModel => write!(fmt, "StoreModel"),
@@ -88,21 +84,33 @@ impl PipelineBuilder {
     }
 
     pub fn find_element(mut self, selector: Selector, query: Value) -> Self {
-        self.pipeline.push(PipelineStage::FindElement {
+        self.pipeline.push(PipelineStage::QueryElement {
             selector,
             query,
             scope: ElementSearchScope::Global,
+            execute: None,
+        });
+
+        self
+    }
+
+    pub fn find_element_in(mut self, selector: Selector, query: Value, scope: ElementSearchScope) -> Self {
+        self.pipeline.push(PipelineStage::QueryElement {
+            selector,
+            query,
+            scope,
+            execute: None,
         });
 
         self
     }
 
     pub fn find_elements(mut self, selector: Selector, query: Value, execute: Pipeline) -> Self {
-        self.pipeline.push(PipelineStage::FindElements {
+        self.pipeline.push(PipelineStage::QueryElement {
             selector,
             query,
-            execute,
             scope: ElementSearchScope::Global,
+            execute: Some(execute),
         });
 
         self
@@ -137,12 +145,39 @@ impl PipelineBuilder {
     }
 }
 
+pub struct PipelineExecutionContext {
+    pub model: JsonValue,
+    pub values: JsonValue,
+    pub models: Vec<JsonValue>,
+    pub scoped_element: Option<Element>,
+    pub current_element: Option<Element>,
+}
+
+impl PipelineExecutionContext {
+    pub fn with_values(values: JsonValue) -> Self {
+        let mut context = PipelineExecutionContext::default();
+        context.values = values;
+        context
+    }
+}
+
+impl Default for PipelineExecutionContext {
+    fn default() -> Self {
+        PipelineExecutionContext {
+            current_element: None,
+            scoped_element: None,
+            model: json!({}),
+            values: json!({}),
+            models: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum PipelineExecutionError {
     ValueResolveError,
-    MissingElementLocator,
-    MissingCurrentElement,
-    MissingStageExecutor(PipelineStage),
+    MissingContextElement,
+    SetModelAttributeError(String),
     WebdriverConnectionError(NewSessionError),
     WebdriverCommandError(CmdError),
 }
@@ -154,16 +189,12 @@ impl fmt::Display for PipelineExecutionError {
                 write!(fmt, "failed to resolve value")
             }
 
-            PipelineExecutionError::MissingElementLocator => {
-                write!(fmt, "missing element locator")
+            PipelineExecutionError::MissingContextElement => {
+                write!(fmt, "required element is missing in the pipeline execution context")
             }
 
-            PipelineExecutionError::MissingCurrentElement => {
-                write!(fmt, "current element is missing in the pipeline execution context")
-            }
-
-            PipelineExecutionError::MissingStageExecutor(stage) => {
-                write!(fmt, "missing pipeline executor for stage {}", stage)
+            PipelineExecutionError::SetModelAttributeError(attribute) => {
+                write!(fmt, "failed to populate model attribute {}", attribute)
             }
 
             PipelineExecutionError::WebdriverConnectionError(error) => {
