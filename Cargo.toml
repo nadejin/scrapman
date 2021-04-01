@@ -1,8 +1,12 @@
 [package]
 name = "scrapman"
+description = "A high-level declarative web scraping framework"
 version = "0.1.0"
-authors = ["Konstantin Nadezhin <konstantin.nadezhin@gmail.com>"]
+license =  "MIT"
 edition = "2018"
+authors = ["Konstantin Nadezhin <konstantin.nadezhin@gmail.com>"]
+homepage = "https://github.com/nadejin/scrapman"
+repository = "https://github.com/nadejin/scrapman.git"
 
 [dependencies]
 futures = "0.3.13"
