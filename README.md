@@ -1,8 +1,8 @@
 # Scrapman
 
-A high-level declarative web scraping library.
+A high-level declarative web scraping framework.
 
-TODO: work in progress, readme to be updated later;
+TODO: work in progress, readme will be updated later;
 
 ## Launching examples
 

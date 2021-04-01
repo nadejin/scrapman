@@ -39,9 +39,9 @@ impl Value {
     }
 }
 
-fn to_string(value: Option<serde_json::Value>) -> Result<String, PipelineExecutionError> {
+fn to_string(value: Option<JsonValue>) -> Result<String, PipelineExecutionError> {
     match value {
-        Some(serde_json::Value::String(value)) => Ok(value.clone()),
+        Some(JsonValue::String(value)) => Ok(value.clone()),
         Some(value) => Ok(value.to_string()),
         _ => Err(PipelineExecutionError::ValueResolveError),
     }
