@@ -1,151 +1,55 @@
-use crate::value::{JsonValue, Value};
+use crate::value::JsonValue;
+use async_trait::async_trait;
 use fantoccini::{
     elements::Element,
     error::{CmdError, NewSessionError},
-    Locator,
+    Client,
 };
+use futures::future::{BoxFuture, FutureExt};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{error::Error, fmt};
 
-#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
-pub enum Selector {
-    Css,
-    Id,
-    LinkText,
+#[async_trait]
+#[typetag::serde(tag = "stage")]
+pub trait ScrapePipelineStage: fmt::Display + Send + Sync {
+    async fn execute(&self, client: &mut Client, context: &mut ScrapePipelineContext) -> Result<(), ScrapeResult>;
 }
 
-impl Selector {
-    pub fn get_locator<'a>(&'a self, query: &'a str) -> Locator<'a> {
-        match self {
-            Selector::Css => Locator::Css(query),
-            Selector::Id => Locator::Id(query),
-            Selector::LinkText => Locator::LinkText(query),
+#[derive(Default, Serialize, Deserialize)]
+pub struct ScrapePipeline {
+    stages: Vec<Box<dyn ScrapePipelineStage>>,
+}
+
+impl ScrapePipeline {
+    pub fn push<T: 'static + ScrapePipelineStage>(mut self, stage: T) -> Self {
+        self.stages.push(Box::new(stage));
+        self
+    }
+
+    pub fn execute<'a>(
+        &'a self,
+        mut client: &'a mut Client,
+        mut context: &'a mut ScrapePipelineContext,
+    ) -> BoxFuture<'a, Result<(), ScrapeResult>> {
+        async move {
+            let mut result = Ok(());
+            for stage in self.stages.iter() {
+                result = stage.execute(&mut client, &mut context).await;
+
+                // TODO: per-stage configuration for error handling
+                if result.is_err() {
+                    break;
+                }
+            }
+
+            result
         }
+        .boxed()
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
-pub enum ElementSearchScope {
-    Global,
-    Scoped,
-    Current,
-}
-
-pub type Pipeline = Vec<PipelineStage>;
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum PipelineStage {
-    OpenUrl {
-        url: Value,
-    },
-    QueryElement {
-        selector: Selector,
-        query: Value,
-        scope: ElementSearchScope,
-        execute: Option<Pipeline>,
-    },
-    FillElement {
-        value: Value,
-    },
-    ClickElement,
-    StoreModel,
-    SetModelAttribute {
-        attribute: String,
-        value: Value,
-    },
-}
-
-impl fmt::Display for PipelineStage {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            PipelineStage::OpenUrl { .. } => write!(fmt, "OpenUrl"),
-            PipelineStage::QueryElement { .. } => write!(fmt, "QueryElement"),
-            PipelineStage::FillElement { .. } => write!(fmt, "FillElement"),
-            PipelineStage::ClickElement => write!(fmt, "ClickElement"),
-            PipelineStage::StoreModel => write!(fmt, "StoreModel"),
-            PipelineStage::SetModelAttribute { attribute, .. } => write!(fmt, "SetModelAttribute({})", attribute),
-        }
-    }
-}
-
-pub struct PipelineBuilder {
-    pipeline: Vec<PipelineStage>,
-}
-
-impl PipelineBuilder {
-    pub fn new() -> Self {
-        PipelineBuilder { pipeline: Vec::new() }
-    }
-
-    pub fn open_url(mut self, url: Value) -> Self {
-        self.pipeline.push(PipelineStage::OpenUrl { url });
-        self
-    }
-
-    pub fn find_element(mut self, selector: Selector, query: Value) -> Self {
-        self.pipeline.push(PipelineStage::QueryElement {
-            selector,
-            query,
-            scope: ElementSearchScope::Global,
-            execute: None,
-        });
-
-        self
-    }
-
-    pub fn find_element_in(mut self, selector: Selector, query: Value, scope: ElementSearchScope) -> Self {
-        self.pipeline.push(PipelineStage::QueryElement {
-            selector,
-            query,
-            scope,
-            execute: None,
-        });
-
-        self
-    }
-
-    pub fn find_elements(mut self, selector: Selector, query: Value, execute: Pipeline) -> Self {
-        self.pipeline.push(PipelineStage::QueryElement {
-            selector,
-            query,
-            scope: ElementSearchScope::Global,
-            execute: Some(execute),
-        });
-
-        self
-    }
-
-    pub fn fill_element(mut self, value: Value) -> Self {
-        self.pipeline.push(PipelineStage::FillElement { value });
-        self
-    }
-
-    pub fn click_element(mut self) -> Self {
-        self.pipeline.push(PipelineStage::ClickElement);
-        self
-    }
-
-    pub fn store_model(mut self) -> Self {
-        self.pipeline.push(PipelineStage::StoreModel);
-        self
-    }
-
-    pub fn set_model_attribute<T: Into<String>>(mut self, attribute: T, value: Value) -> Self {
-        self.pipeline.push(PipelineStage::SetModelAttribute {
-            attribute: attribute.into(),
-            value,
-        });
-
-        self
-    }
-
-    pub fn build(self) -> Pipeline {
-        self.pipeline
-    }
-}
-
-pub struct PipelineExecutionContext {
+pub struct ScrapePipelineContext {
     pub model: JsonValue,
     pub values: JsonValue,
     pub models: Vec<JsonValue>,
@@ -153,17 +57,17 @@ pub struct PipelineExecutionContext {
     pub current_element: Option<Element>,
 }
 
-impl PipelineExecutionContext {
+impl ScrapePipelineContext {
     pub fn with_values(values: JsonValue) -> Self {
-        let mut context = PipelineExecutionContext::default();
+        let mut context = ScrapePipelineContext::default();
         context.values = values;
         context
     }
 }
 
-impl Default for PipelineExecutionContext {
+impl Default for ScrapePipelineContext {
     fn default() -> Self {
-        PipelineExecutionContext {
+        ScrapePipelineContext {
             current_element: None,
             scoped_element: None,
             model: json!({}),
@@ -174,38 +78,38 @@ impl Default for PipelineExecutionContext {
 }
 
 #[derive(Debug)]
-pub enum PipelineExecutionError {
+pub enum ScrapeResult {
     ValueResolveError,
-    MissingContextElement,
+    MissingElement,
     SetModelAttributeError(String),
     WebdriverConnectionError(NewSessionError),
     WebdriverCommandError(CmdError),
 }
 
-impl fmt::Display for PipelineExecutionError {
+impl fmt::Display for ScrapeResult {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PipelineExecutionError::ValueResolveError => {
+            ScrapeResult::ValueResolveError => {
                 write!(fmt, "failed to resolve value")
             }
 
-            PipelineExecutionError::MissingContextElement => {
+            ScrapeResult::MissingElement => {
                 write!(fmt, "required element is missing in the pipeline execution context")
             }
 
-            PipelineExecutionError::SetModelAttributeError(attribute) => {
+            ScrapeResult::SetModelAttributeError(attribute) => {
                 write!(fmt, "failed to populate model attribute {}", attribute)
             }
 
-            PipelineExecutionError::WebdriverConnectionError(error) => {
+            ScrapeResult::WebdriverConnectionError(error) => {
                 write!(fmt, "webdriver connection error: {}", error)
             }
 
-            PipelineExecutionError::WebdriverCommandError(error) => {
+            ScrapeResult::WebdriverCommandError(error) => {
                 write!(fmt, "webdriver command error: {}", error)
             }
         }
     }
 }
 
-impl Error for PipelineExecutionError {}
+impl Error for ScrapeResult {}

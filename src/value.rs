@@ -1,7 +1,7 @@
-use crate::pipeline::{PipelineExecutionContext, PipelineExecutionError};
-use fantoccini::elements::Element;
+use crate::pipeline::{ScrapePipelineContext, ScrapeResult};
 use json_dotpath::DotPaths;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 pub type JsonValue = serde_json::Value;
 
@@ -9,24 +9,30 @@ pub type JsonValue = serde_json::Value;
 pub enum Value {
     Constant(String),
     Context(String),
-    CurrentElementText,
-    ScopedElementText,
+    ElementText,
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl Value {
-    pub async fn resolve(&self, context: &mut PipelineExecutionContext) -> Result<String, PipelineExecutionError> {
+    pub async fn resolve(&self, context: &mut ScrapePipelineContext) -> Result<String, ScrapeResult> {
         match self {
             Value::Constant(value) => Ok(value.clone()),
 
             Value::Context(key) => context
                 .values
                 .dot_get::<JsonValue>(&key)
-                .map_err(|_| PipelineExecutionError::ValueResolveError)
+                .map_err(|_| ScrapeResult::ValueResolveError)
                 .and_then(to_string),
 
-            Value::CurrentElementText => get_text(&mut context.current_element).await,
-
-            Value::ScopedElementText => get_text(&mut context.scoped_element).await,
+            Value::ElementText => match context.current_element {
+                Some(ref mut element) => element.text().await.map_err(ScrapeResult::WebdriverCommandError),
+                None => Err(ScrapeResult::MissingElement),
+            },
         }
     }
 
@@ -39,21 +45,10 @@ impl Value {
     }
 }
 
-fn to_string(value: Option<JsonValue>) -> Result<String, PipelineExecutionError> {
+fn to_string(value: Option<JsonValue>) -> Result<String, ScrapeResult> {
     match value {
         Some(JsonValue::String(value)) => Ok(value.clone()),
         Some(value) => Ok(value.to_string()),
-        _ => Err(PipelineExecutionError::ValueResolveError),
-    }
-}
-
-async fn get_text(element: &mut Option<Element>) -> Result<String, PipelineExecutionError> {
-    if let Some(ref mut element) = element {
-        element
-            .text()
-            .await
-            .map_err(PipelineExecutionError::WebdriverCommandError)
-    } else {
-        Err(PipelineExecutionError::MissingContextElement)
+        _ => Err(ScrapeResult::ValueResolveError),
     }
 }
