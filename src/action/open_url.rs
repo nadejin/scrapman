@@ -1,8 +1,10 @@
 use crate::{
-    pipeline::{ScrapePipelineStage, ScrapeResult},
+    action::ScrapeAction,
+    pipeline::{ScrapeContext, ScrapeError, ScrapeResult},
     value::Value,
 };
 use async_trait::async_trait;
+use fantoccini::Client;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -25,13 +27,9 @@ impl fmt::Display for OpenUrl {
 
 #[async_trait]
 #[typetag::serde]
-impl ScrapePipelineStage for OpenUrl {
-    async fn execute(
-        &self,
-        client: &mut fantoccini::Client,
-        mut context: &mut crate::ScrapePipelineContext,
-    ) -> Result<(), crate::ScrapeResult> {
+impl ScrapeAction for OpenUrl {
+    async fn execute(&self, client: &mut Client, mut context: &mut ScrapeContext) -> ScrapeResult {
         let url = self.url.resolve(&mut context).await?;
-        client.goto(&url).await.map_err(ScrapeResult::WebdriverCommandError)
+        client.goto(&url).await.map_err(ScrapeError::WebdriverCommandError)
     }
 }

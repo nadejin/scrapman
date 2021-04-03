@@ -1,5 +1,4 @@
-use crate::value::JsonValue;
-use async_trait::async_trait;
+use crate::{stage::ScrapeStage, value::JsonValue};
 use fantoccini::{
     elements::Element,
     error::{CmdError, NewSessionError},
@@ -10,32 +9,26 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{error::Error, fmt};
 
-#[async_trait]
-#[typetag::serde(tag = "stage")]
-pub trait ScrapePipelineStage: fmt::Display + Send + Sync {
-    async fn execute(&self, client: &mut Client, context: &mut ScrapePipelineContext) -> Result<(), ScrapeResult>;
-}
-
 #[derive(Default, Serialize, Deserialize)]
 pub struct ScrapePipeline {
-    stages: Vec<Box<dyn ScrapePipelineStage>>,
+    stages: Vec<ScrapeStage>,
 }
 
 impl ScrapePipeline {
-    pub fn push<T: 'static + ScrapePipelineStage>(mut self, stage: T) -> Self {
-        self.stages.push(Box::new(stage));
+    pub fn push<T: Into<ScrapeStage>>(mut self, stage: T) -> Self {
+        self.stages.push(stage.into());
         self
     }
 
     pub fn execute<'a>(
         &'a self,
         mut client: &'a mut Client,
-        mut context: &'a mut ScrapePipelineContext,
-    ) -> BoxFuture<'a, Result<(), ScrapeResult>> {
+        mut context: &'a mut ScrapeContext,
+    ) -> BoxFuture<'a, Result<(), ScrapeError>> {
         async move {
             let mut result = Ok(());
             for stage in self.stages.iter() {
-                result = stage.execute(&mut client, &mut context).await;
+                result = stage.action.execute(&mut client, &mut context).await;
 
                 // TODO: per-stage configuration for error handling
                 if result.is_err() {
@@ -49,7 +42,7 @@ impl ScrapePipeline {
     }
 }
 
-pub struct ScrapePipelineContext {
+pub struct ScrapeContext {
     pub model: JsonValue,
     pub values: JsonValue,
     pub models: Vec<JsonValue>,
@@ -57,17 +50,17 @@ pub struct ScrapePipelineContext {
     pub current_element: Option<Element>,
 }
 
-impl ScrapePipelineContext {
+impl ScrapeContext {
     pub fn with_values(values: JsonValue) -> Self {
-        let mut context = ScrapePipelineContext::default();
+        let mut context = ScrapeContext::default();
         context.values = values;
         context
     }
 }
 
-impl Default for ScrapePipelineContext {
+impl Default for ScrapeContext {
     fn default() -> Self {
-        ScrapePipelineContext {
+        ScrapeContext {
             current_element: None,
             scoped_element: None,
             model: json!({}),
@@ -77,8 +70,10 @@ impl Default for ScrapePipelineContext {
     }
 }
 
+pub type ScrapeResult = Result<(), ScrapeError>;
+
 #[derive(Debug)]
-pub enum ScrapeResult {
+pub enum ScrapeError {
     ValueResolveError,
     MissingElement,
     SetModelAttributeError(String),
@@ -86,30 +81,30 @@ pub enum ScrapeResult {
     WebdriverCommandError(CmdError),
 }
 
-impl fmt::Display for ScrapeResult {
+impl fmt::Display for ScrapeError {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ScrapeResult::ValueResolveError => {
+            ScrapeError::ValueResolveError => {
                 write!(fmt, "failed to resolve value")
             }
 
-            ScrapeResult::MissingElement => {
+            ScrapeError::MissingElement => {
                 write!(fmt, "required element is missing in the pipeline execution context")
             }
 
-            ScrapeResult::SetModelAttributeError(attribute) => {
+            ScrapeError::SetModelAttributeError(attribute) => {
                 write!(fmt, "failed to populate model attribute {}", attribute)
             }
 
-            ScrapeResult::WebdriverConnectionError(error) => {
+            ScrapeError::WebdriverConnectionError(error) => {
                 write!(fmt, "webdriver connection error: {}", error)
             }
 
-            ScrapeResult::WebdriverCommandError(error) => {
+            ScrapeError::WebdriverCommandError(error) => {
                 write!(fmt, "webdriver command error: {}", error)
             }
         }
     }
 }
 
-impl Error for ScrapeResult {}
+impl Error for ScrapeError {}

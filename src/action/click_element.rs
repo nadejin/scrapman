@@ -1,5 +1,9 @@
-use crate::pipeline::{ScrapePipelineStage, ScrapeResult};
+use crate::{
+    action::ScrapeAction,
+    pipeline::{ScrapeContext, ScrapeError, ScrapeResult},
+};
 use async_trait::async_trait;
+use fantoccini::Client;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -14,20 +18,16 @@ impl fmt::Display for ClickElement {
 
 #[async_trait]
 #[typetag::serde]
-impl ScrapePipelineStage for ClickElement {
-    async fn execute(
-        &self,
-        _client: &mut fantoccini::Client,
-        context: &mut crate::ScrapePipelineContext,
-    ) -> Result<(), crate::ScrapeResult> {
+impl ScrapeAction for ClickElement {
+    async fn execute(&self, _: &mut Client, context: &mut ScrapeContext) -> ScrapeResult {
         match context.current_element.take() {
             Some(element) => element
                 .click()
                 .await
-                .map_err(ScrapeResult::WebdriverCommandError)
+                .map_err(ScrapeError::WebdriverCommandError)
                 .map(|_| ()),
 
-            None => Err(ScrapeResult::MissingElement),
+            None => Err(ScrapeError::MissingElement),
         }
     }
 }

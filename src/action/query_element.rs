@@ -1,5 +1,6 @@
 use crate::{
-    pipeline::{ScrapePipeline, ScrapePipelineStage, ScrapeResult},
+    action::ScrapeAction,
+    pipeline::{ScrapeContext, ScrapeError, ScrapePipeline, ScrapeResult},
     value::Value,
 };
 use async_trait::async_trait;
@@ -76,12 +77,8 @@ impl fmt::Display for QueryElement {
 
 #[async_trait]
 #[typetag::serde]
-impl ScrapePipelineStage for QueryElement {
-    async fn execute(
-        &self,
-        mut client: &mut fantoccini::Client,
-        mut context: &mut crate::ScrapePipelineContext,
-    ) -> Result<(), crate::ScrapeResult> {
+impl ScrapeAction for QueryElement {
+    async fn execute(&self, mut client: &mut Client, mut context: &mut ScrapeContext) -> ScrapeResult {
         let query = self.query.resolve(&mut context).await?;
         let locator = self.selector.get_locator(&query);
         let mut elements = match self.scope {
@@ -122,23 +119,23 @@ impl ScrapePipelineStage for QueryElement {
     }
 }
 
-async fn find_elements<'a>(client: &mut Client, locator: Locator<'a>) -> Result<Vec<Element>, ScrapeResult> {
+async fn find_elements<'a>(client: &mut Client, locator: Locator<'a>) -> Result<Vec<Element>, ScrapeError> {
     client
         .find_all(locator)
         .await
-        .map_err(ScrapeResult::WebdriverCommandError)
+        .map_err(ScrapeError::WebdriverCommandError)
 }
 
 async fn find_child_elements<'a>(
     element: &mut Option<Element>,
     locator: Locator<'a>,
-) -> Result<Vec<Element>, ScrapeResult> {
+) -> Result<Vec<Element>, ScrapeError> {
     if let Some(element) = element {
         element
             .find_all(locator)
             .await
-            .map_err(ScrapeResult::WebdriverCommandError)
+            .map_err(ScrapeError::WebdriverCommandError)
     } else {
-        Err(ScrapeResult::MissingElement)
+        Err(ScrapeError::MissingElement)
     }
 }

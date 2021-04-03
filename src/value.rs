@@ -1,4 +1,4 @@
-use crate::pipeline::{ScrapePipelineContext, ScrapeResult};
+use crate::pipeline::{ScrapeContext, ScrapeError};
 use json_dotpath::DotPaths;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -19,19 +19,19 @@ impl fmt::Display for Value {
 }
 
 impl Value {
-    pub async fn resolve(&self, context: &mut ScrapePipelineContext) -> Result<String, ScrapeResult> {
+    pub async fn resolve(&self, context: &mut ScrapeContext) -> Result<String, ScrapeError> {
         match self {
             Value::Constant(value) => Ok(value.clone()),
 
             Value::Context(key) => context
                 .values
                 .dot_get::<JsonValue>(&key)
-                .map_err(|_| ScrapeResult::ValueResolveError)
+                .map_err(|_| ScrapeError::ValueResolveError)
                 .and_then(to_string),
 
             Value::ElementText => match context.current_element {
-                Some(ref mut element) => element.text().await.map_err(ScrapeResult::WebdriverCommandError),
-                None => Err(ScrapeResult::MissingElement),
+                Some(ref mut element) => element.text().await.map_err(ScrapeError::WebdriverCommandError),
+                None => Err(ScrapeError::MissingElement),
             },
         }
     }
@@ -45,10 +45,10 @@ impl Value {
     }
 }
 
-fn to_string(value: Option<JsonValue>) -> Result<String, ScrapeResult> {
+fn to_string(value: Option<JsonValue>) -> Result<String, ScrapeError> {
     match value {
         Some(JsonValue::String(value)) => Ok(value.clone()),
         Some(value) => Ok(value.to_string()),
-        _ => Err(ScrapeResult::ValueResolveError),
+        _ => Err(ScrapeError::ValueResolveError),
     }
 }

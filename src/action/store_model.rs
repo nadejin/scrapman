@@ -1,5 +1,9 @@
-use crate::pipeline::ScrapePipelineStage;
+use crate::{
+    action::ScrapeAction,
+    pipeline::{ScrapeContext, ScrapeResult},
+};
 use async_trait::async_trait;
+use fantoccini::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{fmt, mem::swap};
@@ -15,12 +19,8 @@ impl fmt::Display for StoreModel {
 
 #[async_trait]
 #[typetag::serde]
-impl ScrapePipelineStage for StoreModel {
-    async fn execute(
-        &self,
-        _client: &mut fantoccini::Client,
-        context: &mut crate::ScrapePipelineContext,
-    ) -> Result<(), crate::ScrapeResult> {
+impl ScrapeAction for StoreModel {
+    async fn execute(&self, _: &mut Client, context: &mut ScrapeContext) -> ScrapeResult {
         let mut model = json!({});
         swap(&mut model, &mut context.model);
         context.models.push(model);

@@ -1,11 +1,15 @@
+pub mod action;
 pub mod pipeline;
 pub mod scrapman;
 pub mod stage;
 pub mod value;
 
 pub use crate::{
-    pipeline::{ScrapePipeline, ScrapePipelineContext, ScrapePipelineStage, ScrapeResult},
+    action::{
+        ClickElement, ElementScope, FillElement, OpenUrl, QueryElement, ScrapeAction, Selector, SetModelAttribute,
+        StoreModel,
+    },
+    pipeline::{ScrapeContext, ScrapeError, ScrapePipeline, ScrapeResult},
     scrapman::Scrapman,
-    stage::{ClickElement, ElementScope, FillElement, OpenUrl, QueryElement, Selector, SetModelAttribute, StoreModel},
     value::{JsonValue, Value},
 };

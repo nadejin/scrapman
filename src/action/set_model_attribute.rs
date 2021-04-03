@@ -1,8 +1,10 @@
 use crate::{
-    pipeline::{ScrapePipelineStage, ScrapeResult},
+    action::ScrapeAction,
+    pipeline::{ScrapeContext, ScrapeError, ScrapeResult},
     value::Value,
 };
 use async_trait::async_trait;
+use fantoccini::Client;
 use json_dotpath::DotPaths;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -30,16 +32,12 @@ impl fmt::Display for SetModelAttribute {
 
 #[async_trait]
 #[typetag::serde]
-impl ScrapePipelineStage for SetModelAttribute {
-    async fn execute(
-        &self,
-        _client: &mut fantoccini::Client,
-        mut context: &mut crate::ScrapePipelineContext,
-    ) -> Result<(), crate::ScrapeResult> {
+impl ScrapeAction for SetModelAttribute {
+    async fn execute(&self, _: &mut Client, mut context: &mut ScrapeContext) -> ScrapeResult {
         let value = self.value.resolve(&mut context).await?;
         context
             .model
             .dot_set(&self.attribute, value)
-            .map_err(|_| ScrapeResult::SetModelAttributeError(self.attribute.clone()))
+            .map_err(|_| ScrapeError::SetModelAttributeError(self.attribute.clone()))
     }
 }

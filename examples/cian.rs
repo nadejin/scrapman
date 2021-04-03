@@ -9,7 +9,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let values = serde_yaml::from_str::<JsonValue>(&read_to_string("data/cian.yaml")?)?;
 
     let pipeline = ScrapePipeline::default()
-        .push(OpenUrl::new(Value::context("start_url")))
+        .push(("Start", OpenUrl::new(Value::context("start_url"))))
         .push(QueryElement::new(Selector::Id, Value::context("search.input_id")))
         .push(FillElement(Value::context("search.query")))
         .push(QueryElement::new(
@@ -17,7 +17,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Value::context("search.button_text"),
         ))
         .push(ClickElement)
-        .push(
+        .push((
+            "QueryCards",
             QueryElement::new(Selector::Css, Value::context("selectors.card")).for_each(
                 ScrapePipeline::default()
                     .push(QueryElement::scoped(Selector::Css, Value::context("selectors.title")))
@@ -26,7 +27,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .push(SetModelAttribute::new("price", Value::ElementText))
                     .push(StoreModel),
             ),
-        );
+        ));
 
     println!("Pipeline: {}", serde_yaml::to_string(&pipeline)?);
 
