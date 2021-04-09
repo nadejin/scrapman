@@ -4,15 +4,14 @@ use crate::{
     value::Value,
 };
 use async_trait::async_trait;
-use fantoccini::Client;
 use json_dotpath::DotPaths;
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::fmt::{Display, Formatter, Result as FormatResult};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SetModelAttribute {
-    attribute: String,
-    value: Value,
+    pub attribute: String,
+    pub value: Value,
 }
 
 impl SetModelAttribute {
@@ -24,16 +23,16 @@ impl SetModelAttribute {
     }
 }
 
-impl fmt::Display for SetModelAttribute {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SetModelAttribute({}, {})", self.attribute, self.value)
+impl Display for SetModelAttribute {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> FormatResult {
+        write!(fmt, "SetModelAttribute({}, {})", self.attribute, self.value)
     }
 }
 
 #[async_trait]
 #[typetag::serde]
 impl ScrapeAction for SetModelAttribute {
-    async fn execute(&self, _: &mut Client, mut context: &mut ScrapeContext) -> ScrapeResult {
+    async fn execute(&self, mut context: &mut ScrapeContext) -> ScrapeResult {
         let value = self.value.resolve(&mut context).await?;
         context
             .model

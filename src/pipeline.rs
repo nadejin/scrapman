@@ -1,15 +1,26 @@
-use crate::{stage::ScrapeStage, value::JsonValue};
+use crate::{
+    client::ScrapeClient,
+    stage::{FlowControl, ScrapeStage},
+    value::JsonValue,
+};
 use fantoccini::{
     elements::Element,
     error::{CmdError, NewSessionError},
-    Client,
 };
 use futures::future::{BoxFuture, FutureExt};
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{error::Error, fmt};
+use std::{
+    error::Error,
+    fmt::{Display, Formatter, Result as FormatResult},
+};
 
-#[derive(Default, Serialize, Deserialize)]
+lazy_static! {
+    static ref EMPTY: JsonValue = json!({});
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ScrapePipeline {
     stages: Vec<ScrapeStage>,
 }
@@ -20,29 +31,48 @@ impl ScrapePipeline {
         self
     }
 
-    pub fn execute<'a>(
-        &'a self,
-        mut client: &'a mut Client,
-        mut context: &'a mut ScrapeContext,
-    ) -> BoxFuture<'a, Result<(), ScrapeError>> {
+    pub fn execute<'a>(&'a self, context: &'a mut ScrapeContext) -> BoxFuture<'a, ScrapeResult> {
         async move {
-            let mut result = Ok(());
-            for stage in self.stages.iter() {
-                result = stage.action.execute(&mut client, &mut context).await;
+            let mut idx = 0;
+            loop {
+                match self.stages.get(idx) {
+                    Some(stage) => {
+                        let result = stage.action.execute(context).await;
 
-                // TODO: per-stage configuration for error handling
-                if result.is_err() {
-                    break;
+                        // TODO log error
+
+                        let flow = match result {
+                            Ok(_) => &stage.on_complete,
+                            Err(_) => &stage.on_error,
+                        };
+
+                        match flow {
+                            FlowControl::Continue => idx += 1,
+                            FlowControl::Quit => break,
+                            FlowControl::Goto(next_stage) => {
+                                match self.stages.iter().position(|stage| match &stage.name {
+                                    Some(name) => name == next_stage,
+                                    _ => false,
+                                }) {
+                                    Some(pos) => idx = pos,
+                                    None => return Err(ScrapeError::MissingPipelineStage(next_stage.clone())),
+                                }
+                            }
+                        };
+                    }
+
+                    None => break,
                 }
             }
 
-            result
+            Ok(())
         }
         .boxed()
     }
 }
 
 pub struct ScrapeContext {
+    pub client: Box<dyn ScrapeClient>,
     pub model: JsonValue,
     pub values: JsonValue,
     pub models: Vec<JsonValue>,
@@ -51,21 +81,14 @@ pub struct ScrapeContext {
 }
 
 impl ScrapeContext {
-    pub fn with_values(values: JsonValue) -> Self {
-        let mut context = ScrapeContext::default();
-        context.values = values;
-        context
-    }
-}
-
-impl Default for ScrapeContext {
-    fn default() -> Self {
+    pub fn new<C: ScrapeClient + 'static, V: Into<Option<JsonValue>>>(client: C, values: V) -> Self {
         ScrapeContext {
+            client: Box::new(client),
+            model: EMPTY.clone(),
+            values: values.into().unwrap_or(EMPTY.clone()),
+            models: Vec::new(),
             current_element: None,
             scoped_element: None,
-            model: json!({}),
-            values: json!({}),
-            models: Vec::new(),
         }
     }
 }
@@ -76,13 +99,14 @@ pub type ScrapeResult = Result<(), ScrapeError>;
 pub enum ScrapeError {
     ValueResolveError,
     MissingElement,
+    MissingPipelineStage(String),
     SetModelAttributeError(String),
     WebdriverConnectionError(NewSessionError),
     WebdriverCommandError(CmdError),
 }
 
-impl fmt::Display for ScrapeError {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for ScrapeError {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> FormatResult {
         match self {
             ScrapeError::ValueResolveError => {
                 write!(fmt, "failed to resolve value")
@@ -90,6 +114,10 @@ impl fmt::Display for ScrapeError {
 
             ScrapeError::MissingElement => {
                 write!(fmt, "required element is missing in the pipeline execution context")
+            }
+
+            ScrapeError::MissingPipelineStage(stage) => {
+                write!(fmt, "missing pipeline stage {}", stage)
             }
 
             ScrapeError::SetModelAttributeError(attribute) => {

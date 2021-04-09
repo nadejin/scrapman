@@ -14,11 +14,10 @@ pub use store_model::StoreModel;
 
 use crate::pipeline::{ScrapeContext, ScrapeResult};
 use async_trait::async_trait;
-use fantoccini::Client;
-use std::fmt;
+use std::fmt::{Debug, Display};
 
 #[async_trait]
 #[typetag::serde(tag = "type")]
-pub trait ScrapeAction: fmt::Display + Send + Sync {
-    async fn execute(&self, client: &mut Client, context: &mut ScrapeContext) -> ScrapeResult;
+pub trait ScrapeAction: Display + Send + Sync + Debug {
+    async fn execute(&self, context: &mut ScrapeContext) -> ScrapeResult;
 }

@@ -1,6 +1,6 @@
 use scrapman::{
-    ClickElement, FillElement, JsonValue, OpenUrl, QueryElement, ScrapePipeline, Scrapman, Selector, SetModelAttribute,
-    StoreModel, Value,
+    stage::ScrapeStage, ClickElement, FillElement, JsonValue, OpenUrl, QueryElement, ScrapePipeline, Scrapman,
+    Selector, SetModelAttribute, StoreModel, Value,
 };
 use std::{error::Error, fs::read_to_string};
 
@@ -9,27 +9,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let values = serde_yaml::from_str::<JsonValue>(&read_to_string("data/cian.yaml")?)?;
 
     let pipeline = ScrapePipeline::default()
-        .push(("Start", OpenUrl::new(Value::context("start_url"))))
-        .push(QueryElement::new(Selector::Id, Value::context("search.input_id")))
-        .push(FillElement(Value::context("search.query")))
-        .push(QueryElement::new(
+        .push(OpenUrl::new(Value::context("start_url")))
+        .push(QueryElement::global(Selector::Id, Value::context("search.input_id")))
+        .push(FillElement::new(Value::context("search.query")))
+        .push(QueryElement::global(
             Selector::LinkText,
             Value::context("search.button_text"),
         ))
         .push(ClickElement)
-        .push((
-            "QueryCards",
-            QueryElement::new(Selector::Css, Value::context("selectors.card")).for_each(
-                ScrapePipeline::default()
-                    .push(QueryElement::scoped(Selector::Css, Value::context("selectors.title")))
-                    .push(SetModelAttribute::new("title", Value::ElementText))
-                    .push(QueryElement::scoped(Selector::Css, Value::context("selectors.price")))
-                    .push(SetModelAttribute::new("price", Value::ElementText))
-                    .push(StoreModel),
-            ),
-        ));
+        .push(
+            ScrapeStage::from(
+                QueryElement::global(Selector::Css, Value::context("selectors.card")).for_each(
+                    ScrapePipeline::default()
+                        .push(QueryElement::scoped(Selector::Css, Value::context("selectors.title")))
+                        .push(SetModelAttribute::new("title", Value::ElementText))
+                        .push(QueryElement::scoped(Selector::Css, Value::context("selectors.price")))
+                        .push(SetModelAttribute::new("price", Value::ElementText))
+                        .push(StoreModel),
+                ),
+            )
+            .with_name("QueryCards"),
+        );
 
-    println!("Pipeline: {}", serde_yaml::to_string(&pipeline)?);
+    println!("{}", serde_yaml::to_string(&pipeline)?);
 
     let scrapman = Scrapman::new("http://localhost:4444");
 

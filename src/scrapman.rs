@@ -18,25 +18,14 @@ impl Scrapman {
         pipeline: ScrapePipeline,
         values: T,
     ) -> Result<Vec<JsonValue>, ScrapeError> {
-        let mut client = ClientBuilder::native()
+        let client = ClientBuilder::native()
             .connect(&self.webdriver_url)
             .await
             .map_err(ScrapeError::WebdriverConnectionError)?;
 
-        let mut context = match values.into() {
-            Some(values) => ScrapeContext::with_values(values),
-            None => ScrapeContext::default(),
-        };
-
-        let result = pipeline.execute(&mut client, &mut context).await;
-
-        client
-            .close_window()
-            .await
-            .map_err(ScrapeError::WebdriverCommandError)?;
-
-        client.close().await.map_err(ScrapeError::WebdriverCommandError)?;
-
-        result.map(|_| context.models)
+        let mut context = ScrapeContext::new(client, values);
+        pipeline.execute(&mut context).await?;
+        context.client.disconnect().await?;
+        Ok(context.models)
     }
 }

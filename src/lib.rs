@@ -1,4 +1,5 @@
 pub mod action;
+pub mod client;
 pub mod pipeline;
 pub mod scrapman;
 pub mod stage;

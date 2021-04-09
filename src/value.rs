@@ -1,7 +1,7 @@
 use crate::pipeline::{ScrapeContext, ScrapeError};
 use json_dotpath::DotPaths;
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::fmt::{Display, Formatter, Result as FormatResult};
 
 pub type JsonValue = serde_json::Value;
 
@@ -12,9 +12,9 @@ pub enum Value {
     ElementText,
 }
 
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+impl Display for Value {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> FormatResult {
+        write!(fmt, "{:?}", self)
     }
 }
 

@@ -4,24 +4,31 @@ use crate::{
     value::Value,
 };
 use async_trait::async_trait;
-use fantoccini::Client;
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::fmt::{Display, Formatter, Result as FormatResult};
 
-#[derive(Serialize, Deserialize)]
-pub struct FillElement(pub Value);
+#[derive(Debug, Serialize, Deserialize)]
+pub struct FillElement {
+    pub value: Value,
+}
 
-impl fmt::Display for FillElement {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "FillElement({})", self.0)
+impl FillElement {
+    pub fn new(value: Value) -> FillElement {
+        FillElement { value }
+    }
+}
+
+impl Display for FillElement {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> FormatResult {
+        write!(fmt, "FillElement({})", self.value)
     }
 }
 
 #[async_trait]
 #[typetag::serde]
 impl ScrapeAction for FillElement {
-    async fn execute(&self, _: &mut Client, mut context: &mut ScrapeContext) -> ScrapeResult {
-        let value = self.0.resolve(&mut context).await?;
+    async fn execute(&self, mut context: &mut ScrapeContext) -> ScrapeResult {
+        let value = self.value.resolve(&mut context).await?;
         if let Some(ref mut element) = context.current_element {
             element
                 .send_keys(&value)

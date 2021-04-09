@@ -3,23 +3,22 @@ use crate::{
     pipeline::{ScrapeContext, ScrapeError, ScrapeResult},
 };
 use async_trait::async_trait;
-use fantoccini::Client;
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::fmt::{Display, Formatter, Result as FormatResult};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ClickElement;
 
-impl fmt::Display for ClickElement {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ClickElement")
+impl Display for ClickElement {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> FormatResult {
+        write!(fmt, "ClickElement")
     }
 }
 
 #[async_trait]
 #[typetag::serde]
 impl ScrapeAction for ClickElement {
-    async fn execute(&self, _: &mut Client, context: &mut ScrapeContext) -> ScrapeResult {
+    async fn execute(&self, context: &mut ScrapeContext) -> ScrapeResult {
         match context.current_element.take() {
             Some(element) => element
                 .click()
