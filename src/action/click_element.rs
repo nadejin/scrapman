@@ -1,6 +1,6 @@
 use crate::{
-    action::ScrapeAction,
-    pipeline::{ScrapeContext, ScrapeError, ScrapeResult},
+    action::{ScrapeAction, ScrapeActionResult},
+    pipeline::{ScrapeContext, ScrapeError},
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ impl Display for ClickElement {
 #[async_trait]
 #[typetag::serde]
 impl ScrapeAction for ClickElement {
-    async fn execute(&self, context: &mut ScrapeContext) -> ScrapeResult {
+    async fn execute(&self, context: &mut ScrapeContext) -> ScrapeActionResult {
         match context.current_element.take() {
             Some(element) => element
                 .click()

@@ -1,6 +1,6 @@
 use crate::{
-    action::ScrapeAction,
-    pipeline::{ScrapeContext, ScrapeError, ScrapeResult},
+    action::{ScrapeAction, ScrapeActionResult},
+    pipeline::{ScrapeContext, ScrapeError},
     value::Value,
 };
 use async_trait::async_trait;
@@ -27,7 +27,7 @@ impl Display for FillElement {
 #[async_trait]
 #[typetag::serde]
 impl ScrapeAction for FillElement {
-    async fn execute(&self, mut context: &mut ScrapeContext) -> ScrapeResult {
+    async fn execute(&self, mut context: &mut ScrapeContext) -> ScrapeActionResult {
         let value = self.value.resolve(&mut context).await?;
         if let Some(ref mut element) = context.current_element {
             element

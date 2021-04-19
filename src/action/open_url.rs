@@ -1,6 +1,6 @@
 use crate::{
-    action::ScrapeAction,
-    pipeline::{ScrapeContext, ScrapeResult},
+    action::{ScrapeAction, ScrapeActionResult},
+    pipeline::ScrapeContext,
     value::Value,
 };
 use async_trait::async_trait;
@@ -27,7 +27,7 @@ impl Display for OpenUrl {
 #[async_trait]
 #[typetag::serde]
 impl ScrapeAction for OpenUrl {
-    async fn execute(&self, mut context: &mut ScrapeContext) -> ScrapeResult {
+    async fn execute(&self, mut context: &mut ScrapeContext) -> ScrapeActionResult {
         let url = self.url.resolve(&mut context).await?;
         context.client.goto(&url).await
     }

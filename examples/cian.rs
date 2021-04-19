@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let scrapman = Scrapman::new("http://localhost:4444");
 
     match scrapman.launch(pipeline, values).await {
-        Ok(scraped) => println!("Scraped data:\n{}", serde_yaml::to_string(&scraped)?),
+        Ok(ctx) => println!("Scraped data:\n{}", serde_yaml::to_string(&ctx.models)?),
         Err(error) => println!("Error: {}", error),
     };
 

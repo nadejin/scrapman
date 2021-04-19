@@ -1,6 +1,6 @@
 use crate::{
-    action::ScrapeAction,
-    pipeline::{ScrapeContext, ScrapeError, ScrapePipeline, ScrapeResult},
+    action::{ScrapeAction, ScrapeActionResult},
+    pipeline::{ScrapeContext, ScrapeError, ScrapePipeline},
     value::Value,
 };
 use async_trait::async_trait;
@@ -81,7 +81,7 @@ impl Display for QueryElement {
 #[async_trait]
 #[typetag::serde]
 impl ScrapeAction for QueryElement {
-    async fn execute(&self, mut context: &mut ScrapeContext) -> ScrapeResult {
+    async fn execute(&self, mut context: &mut ScrapeContext) -> ScrapeActionResult {
         let query = self.query.resolve(&mut context).await?;
         let locator = self.selector.get_locator(&query);
         let mut elements = match self.scope {

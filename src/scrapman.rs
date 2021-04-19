@@ -1,6 +1,11 @@
-use crate::pipeline::{ScrapeContext, ScrapeError, ScrapePipeline};
 use crate::value::JsonValue;
+use crate::{
+    client::ScrapeClient,
+    pipeline::{ScrapeContext, ScrapeError, ScrapePipeline},
+};
 use fantoccini::ClientBuilder;
+
+pub type ScrapeResult = Result<ScrapeContext, ScrapeError>;
 
 pub struct Scrapman {
     webdriver_url: String,
@@ -13,19 +18,31 @@ impl Scrapman {
         }
     }
 
-    pub async fn launch<T: Into<Option<JsonValue>>>(
-        &self,
-        pipeline: ScrapePipeline,
-        values: T,
-    ) -> Result<Vec<JsonValue>, ScrapeError> {
+    pub async fn launch<T>(&self, pipeline: ScrapePipeline, values: T) -> ScrapeResult
+    where
+        T: Into<Option<JsonValue>>,
+    {
         let client = ClientBuilder::native()
             .connect(&self.webdriver_url)
             .await
             .map_err(ScrapeError::WebdriverConnectionError)?;
 
+        self.launch_with_client(pipeline, values, client).await
+    }
+
+    pub async fn launch_with_client<Values, Client>(
+        &self,
+        pipeline: ScrapePipeline,
+        values: Values,
+        client: Client,
+    ) -> ScrapeResult
+    where
+        Values: Into<Option<JsonValue>>,
+        Client: ScrapeClient + 'static,
+    {
         let mut context = ScrapeContext::new(client, values);
         pipeline.execute(&mut context).await?;
         context.client.disconnect().await?;
-        Ok(context.models)
+        Ok(context)
     }
 }

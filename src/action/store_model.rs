@@ -1,6 +1,6 @@
 use crate::{
-    action::ScrapeAction,
-    pipeline::{ScrapeContext, ScrapeResult},
+    action::{ScrapeAction, ScrapeActionResult},
+    pipeline::ScrapeContext,
 };
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -19,7 +19,7 @@ impl fmt::Display for StoreModel {
 #[async_trait]
 #[typetag::serde]
 impl ScrapeAction for StoreModel {
-    async fn execute(&self, context: &mut ScrapeContext) -> ScrapeResult {
+    async fn execute(&self, context: &mut ScrapeContext) -> ScrapeActionResult {
         let mut model = json!({});
         swap(&mut model, &mut context.model);
         Ok(context.models.push(model))
