@@ -37,7 +37,6 @@ impl ScrapePipeline {
                         let result = stage.action.execute(context).await;
 
                         // TODO log error
-                        dbg!(&result);
 
                         let flow = match result {
                             Ok(_) => &stage.on_complete,
@@ -46,7 +45,9 @@ impl ScrapePipeline {
 
                         match flow {
                             FlowControl::Continue => idx += 1,
+
                             FlowControl::Quit => break,
+
                             FlowControl::Goto(next_stage) => {
                                 match self.stages.iter().position(|stage| match &stage.name {
                                     Some(name) => name == next_stage,
@@ -95,6 +96,8 @@ impl ScrapeContext {
 pub enum ScrapeError {
     ValueResolveError,
     MissingElement,
+    MissingUrl,
+    MissingQuery,
     MissingPipelineStage(String),
     SetModelAttributeError(String),
     WebdriverConnectionError(NewSessionError),
@@ -111,6 +114,14 @@ impl Display for ScrapeError {
 
             ScrapeError::MissingElement => {
                 write!(fmt, "required element is missing in the pipeline execution context")
+            }
+
+            ScrapeError::MissingUrl => {
+                write!(fmt, "missing URL to open")
+            }
+
+            ScrapeError::MissingQuery => {
+                write!(fmt, "missing element query")
             }
 
             ScrapeError::MissingPipelineStage(stage) => {
@@ -155,7 +166,7 @@ mod test {
     #[tokio::test]
     async fn test_plain_pipeline() {
         let url = "http://localhost";
-        let pipeline = ScrapePipeline::default().push(OpenUrl::new(Value::constant(url)));
+        let pipeline = ScrapePipeline::default().push(OpenUrl::new(Value::Constant(url.into())));
 
         let mut client = MockScrapeClient::new();
         client

@@ -18,7 +18,7 @@ impl FillElement {
     }
 }
 
-impl Display for FillElement {
+impl<'a> Display for FillElement {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> FormatResult {
         write!(fmt, "FillElement({})", self.value)
     }
@@ -28,7 +28,7 @@ impl Display for FillElement {
 #[typetag::serde]
 impl ScrapeAction for FillElement {
     async fn execute(&self, mut context: &mut ScrapeContext) -> ScrapeActionResult {
-        let value = self.value.resolve(&mut context).await?;
+        let value = self.value.resolve(&mut context).await?.unwrap_or_default();
         if let Some(ref mut element) = context.current_element {
             element
                 .send_keys(&value)

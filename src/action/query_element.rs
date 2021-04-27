@@ -82,7 +82,12 @@ impl Display for QueryElement {
 #[typetag::serde]
 impl ScrapeAction for QueryElement {
     async fn execute(&self, mut context: &mut ScrapeContext) -> ScrapeActionResult {
-        let query = self.query.resolve(&mut context).await?;
+        let query = self
+            .query
+            .resolve(&mut context)
+            .await?
+            .ok_or(ScrapeError::MissingQuery)?;
+
         let locator = self.selector.get_locator(&query);
         let mut elements = match self.scope {
             ElementScope::Global => context.client.find_all(locator).await?,

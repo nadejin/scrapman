@@ -9,22 +9,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let values = serde_yaml::from_str::<JsonValue>(&read_to_string("data/cian.yaml")?)?;
 
     let pipeline = ScrapePipeline::default()
-        .push(OpenUrl::new(Value::context("start_url")))
-        .push(QueryElement::global(Selector::Id, Value::context("search.input_id")))
-        .push(FillElement::new(Value::context("search.query")))
+        .push(OpenUrl::new(Value::Context("start_url".into())))
+        .push(QueryElement::global(Selector::Id, Value::Context("search.input_id".into())))
+        .push(FillElement::new(Value::Context("search.query".into())))
         .push(QueryElement::global(
             Selector::LinkText,
-            Value::context("search.button_text"),
+            Value::Context("search.button_text".into()),
         ))
         .push(ClickElement)
         .push(
             ScrapeStage::from(
-                QueryElement::global(Selector::Css, Value::context("selectors.card")).for_each(
+                QueryElement::global(Selector::Css, Value::Context("selectors.card".into())).for_each(
                     ScrapePipeline::default()
-                        .push(QueryElement::scoped(Selector::Css, Value::context("selectors.title")))
+                        .push(QueryElement::scoped(Selector::Css, Value::Context("selectors.title".into())))
                         .push(SetModelAttribute::new("title", Value::ElementText))
-                        .push(QueryElement::scoped(Selector::Css, Value::context("selectors.price")))
+                        .push(QueryElement::scoped(Selector::Css, Value::Context("selectors.price".into())))
                         .push(SetModelAttribute::new("price", Value::ElementText))
+                        .push(SetModelAttribute::new("class", Value::ElementAttribute("class".into())))
                         .push(StoreModel),
                 ),
             )

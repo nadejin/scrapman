@@ -10,6 +10,7 @@ pub enum Value {
     Constant(String),
     Context(String),
     ElementText,
+    ElementAttribute(String),
 }
 
 impl Display for Value {
@@ -19,36 +20,39 @@ impl Display for Value {
 }
 
 impl Value {
-    pub async fn resolve(&self, context: &mut ScrapeContext) -> Result<String, ScrapeError> {
+    pub async fn resolve(&self, context: &mut ScrapeContext) -> Result<Option<String>, ScrapeError> {
         match self {
-            Value::Constant(value) => Ok(value.clone()),
+            Value::Constant(value) => Ok(Some(value.to_owned())),
 
             Value::Context(key) => context
                 .values
                 .dot_get::<JsonValue>(&key)
-                .map_err(|_| ScrapeError::ValueResolveError)
-                .and_then(to_string),
+                .map(to_string)
+                .map_err(|_| ScrapeError::ValueResolveError),
 
-            Value::ElementText => match context.current_element {
-                Some(ref mut element) => element.text().await.map_err(ScrapeError::WebdriverCommandError),
-                None => Err(ScrapeError::MissingElement),
-            },
+            Value::ElementText => {
+                let element = context.current_element.as_mut().ok_or(ScrapeError::MissingElement)?;
+                element
+                    .text()
+                    .await
+                    .map(Option::Some)
+                    .map_err(ScrapeError::WebdriverCommandError)
+            }
+
+            Value::ElementAttribute(attribute) => {
+                let element = context.current_element.as_mut().ok_or(ScrapeError::MissingElement)?;
+                element
+                    .attr(attribute)
+                    .await
+                    .map_err(ScrapeError::WebdriverCommandError)
+            }
         }
-    }
-
-    pub fn constant<T: Into<String>>(value: T) -> Self {
-        Value::Constant(value.into())
-    }
-
-    pub fn context<T: Into<String>>(value: T) -> Self {
-        Value::Context(value.into())
     }
 }
 
-fn to_string(value: Option<JsonValue>) -> Result<String, ScrapeError> {
-    match value {
-        Some(JsonValue::String(value)) => Ok(value.clone()),
-        Some(value) => Ok(value.to_string()),
-        _ => Err(ScrapeError::ValueResolveError),
-    }
+fn to_string(value: Option<JsonValue>) -> Option<String> {
+    value.map(|value| match value {
+        JsonValue::String(value) => value.clone(),
+        value => value.to_string(),
+    })
 }
