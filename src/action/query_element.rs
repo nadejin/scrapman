@@ -95,6 +95,10 @@ impl ScrapeAction for QueryElement {
             ElementScope::Current => find_child_elements(&mut context.current_element, locator).await?,
         };
 
+        if elements.is_empty() {
+            return Err(ScrapeError::ElementQueryEmptyResult);
+        }
+
         if let Some(ref pipeline) = self.for_each {
             // Store current scoped element
             let current_scoped = context.scoped_element.take();

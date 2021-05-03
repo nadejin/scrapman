@@ -20,11 +20,17 @@ impl Display for ClickElement {
 impl ScrapeAction for ClickElement {
     async fn execute(&self, context: &mut ScrapeContext) -> ScrapeActionResult {
         match context.current_element.take() {
-            Some(element) => element
-                .click()
-                .await
-                .map_err(ScrapeError::WebdriverCommandError)
-                .map(|_| ()),
+            Some(mut element) => {
+                // Send keys action is required to scroll the element into the view
+                element
+                    .send_keys("")
+                    .await
+                    .map_err(ScrapeError::WebdriverCommandError)?;
+
+                element.click().await.map_err(ScrapeError::WebdriverCommandError)?;
+
+                Ok(())
+            }
 
             None => Err(ScrapeError::MissingElement),
         }

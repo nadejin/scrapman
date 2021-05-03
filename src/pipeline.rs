@@ -14,6 +14,7 @@ use std::{
     error::Error,
     fmt::{Display, Formatter, Result as FormatResult},
 };
+use tokio::time::{sleep, Duration};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ScrapePipeline {
@@ -34,7 +35,14 @@ impl ScrapePipeline {
             loop {
                 match self.stages.get(idx) {
                     Some(stage) => {
+                        // TODO: proper error and flow control logging
+                        println!("Launching stage {}", stage.action);
+
                         let result = stage.action.execute(context).await;
+
+                        if let Err(ref err) = result {
+                            dbg!(err);
+                        }
 
                         // TODO log error
 
@@ -49,6 +57,8 @@ impl ScrapePipeline {
                             FlowControl::Quit => break,
 
                             FlowControl::Goto(next_stage) => {
+                                println!("Going to {}", next_stage);
+
                                 match self.stages.iter().position(|stage| match &stage.name {
                                     Some(name) => name == next_stage,
                                     _ => false,
@@ -56,6 +66,16 @@ impl ScrapePipeline {
                                     Some(pos) => idx = pos,
                                     None => return Err(ScrapeError::MissingPipelineStage(next_stage.clone())),
                                 }
+                            }
+
+                            FlowControl::Repeat { delay } => {
+                                println!("Repeating stage with delay {:?}", delay);
+
+                                if let Some(delay) = *delay {
+                                    sleep(Duration::from_secs_f64(delay)).await;
+                                }
+
+                                // Current stage index remains the same to repeat the stage
                             }
                         };
                     }
@@ -95,6 +115,7 @@ impl ScrapeContext {
 #[derive(Debug)]
 pub enum ScrapeError {
     ValueResolveError,
+    ElementQueryEmptyResult,
     MissingElement,
     MissingUrl,
     MissingQuery,
@@ -110,6 +131,10 @@ impl Display for ScrapeError {
         match self {
             ScrapeError::ValueResolveError => {
                 write!(fmt, "failed to resolve value")
+            }
+
+            ScrapeError::ElementQueryEmptyResult => {
+                write!(fmt, "element query empty result")
             }
 
             ScrapeError::MissingElement => {
@@ -189,7 +214,7 @@ mod test {
     #[tokio::test]
     async fn test_quit_on_error() {
         let pipeline = ScrapePipeline::default()
-            .push(ScrapeStage::from(TestError).on_error(FlowControl::Quit))
+            .push(ScrapeStage::from(TestError).on_any_error(FlowControl::Quit))
             .push(StoreModel);
 
         let mut client = MockScrapeClient::new();

@@ -6,6 +6,21 @@ pub enum FlowControl {
     Continue,
     Quit,
     Goto(String),
+    Repeat { delay: Option<f64> },
+}
+
+impl FlowControl {
+    pub fn goto<T: Into<String>>(stage: T) -> Self {
+        FlowControl::Goto(stage.into())
+    }
+
+    pub fn repeat() -> Self {
+        FlowControl::Repeat { delay: None }
+    }
+
+    pub fn repeat_with_delay(delay: f64) -> Self {
+        FlowControl::Repeat { delay: Some(delay) }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -27,7 +42,7 @@ impl ScrapeStage {
         self
     }
 
-    pub fn on_error(mut self, on_error: FlowControl) -> Self {
+    pub fn on_any_error(mut self, on_error: FlowControl) -> Self {
         self.on_error = on_error;
         self
     }

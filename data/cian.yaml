@@ -7,3 +7,5 @@ selectors:
   card: article[data-name="CardComponent"]
   title: div[data-name="TitleComponent"]
   price: span[data-mark="MainPrice"]
+  next_page: div[data-name="Pagination"] li[class*="list-item--active"] + li > a
+  preload: div[class*="preloadOverlay"]

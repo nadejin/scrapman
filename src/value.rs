@@ -20,6 +20,18 @@ impl Display for Value {
 }
 
 impl Value {
+    pub fn constant<T: Into<String>>(value: T) -> Self {
+        Value::Constant(value.into())
+    }
+
+    pub fn context<T: Into<String>>(key: T) -> Self {
+        Value::Context(key.into())
+    }
+
+    pub fn element_attribute<T: Into<String>>(attribute: T) -> Self {
+        Value::ElementAttribute(attribute.into())
+    }
+
     pub async fn resolve(&self, context: &mut ScrapeContext) -> Result<Option<String>, ScrapeError> {
         match self {
             Value::Constant(value) => Ok(Some(value.to_owned())),

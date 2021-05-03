@@ -1,4 +1,9 @@
-use crate::{ScrapeError, action::{ScrapeAction, ScrapeActionResult}, pipeline::ScrapeContext, value::Value};
+use crate::{
+    action::{ScrapeAction, ScrapeActionResult},
+    pipeline::ScrapeContext,
+    value::Value,
+    ScrapeError,
+};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter, Result as FormatResult};
@@ -26,7 +31,7 @@ impl ScrapeAction for OpenUrl {
     async fn execute(&self, mut context: &mut ScrapeContext) -> ScrapeActionResult {
         match self.url.resolve(&mut context).await? {
             Some(url) => context.client.goto(&url).await,
-            None => Err(ScrapeError::MissingUrl)
+            None => Err(ScrapeError::MissingUrl),
         }
     }
 }

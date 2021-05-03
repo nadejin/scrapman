@@ -9,6 +9,7 @@ homepage = "https://github.com/nadejin/scrapman"
 repository = "https://github.com/nadejin/scrapman.git"
 
 [dependencies]
+tokio = { version = "1.3.0", features = ["full"] }
 futures = "0.3.13"
 async-trait = "0.1.48"
 fantoccini = "0.17.3"
@@ -18,6 +19,5 @@ json_dotpath = "1.1.0"
 typetag = "0.1.7"
 
 [dev-dependencies]
-tokio = { version = "1.3.0", features = ["full"] }
 serde_yaml = "0.8.17"
 mockall = "0.9.1"

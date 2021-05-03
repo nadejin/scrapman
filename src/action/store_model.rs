@@ -22,6 +22,10 @@ impl ScrapeAction for StoreModel {
     async fn execute(&self, context: &mut ScrapeContext) -> ScrapeActionResult {
         let mut model = json!({});
         swap(&mut model, &mut context.model);
+
+        // TODO: proper logging
+        dbg!(&model);
+
         Ok(context.models.push(model))
     }
 }
