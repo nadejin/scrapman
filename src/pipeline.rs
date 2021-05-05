@@ -8,6 +8,7 @@ use fantoccini::{
     error::{CmdError, NewSessionError},
 };
 use futures::future::{BoxFuture, FutureExt};
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
@@ -35,47 +36,59 @@ impl ScrapePipeline {
             loop {
                 match self.stages.get(idx) {
                     Some(stage) => {
-                        // TODO: proper error and flow control logging
-                        println!("Launching stage {}", stage.action);
-
-                        let result = stage.action.execute(context).await;
-
-                        if let Err(ref err) = result {
-                            dbg!(err);
+                        match stage.name {
+                            Some(ref name) => info!("Executing {}: {}", name, stage.action),
+                            None => info!("Executing: {}", stage.action),
                         }
 
-                        // TODO log error
+                        // Stage action execution, flow control evaluation based on the result
+                        let flow: &FlowControl;
+                        match stage.action.execute(context).await {
+                            // "On complete" branch is executed
+                            Ok(_) => flow = &stage.on_complete,
 
-                        let flow = match result {
-                            Ok(_) => &stage.on_complete,
-                            Err(_) => &stage.on_error,
-                        };
+                            // Internal client error - pipeline execution is stopped, the error is propagated
+                            Err(e @ ScrapeError::WebdriverCommandError(_)) => return Err(e),
+
+                            // Stage action execution failure - "on error" branch is executed
+                            Err(error) => {
+                                warn!("Action execution failure: {}", error);
+                                flow = &stage.on_error;
+                            }
+                        }
 
                         match flow {
+                            // Following pipeline stage is executed
                             FlowControl::Continue => idx += 1,
 
-                            FlowControl::Quit => break,
+                            // Pipeline execution is stopped
+                            FlowControl::Quit => {
+                                info!("Flow control quit, stopping the pipeline execution");
+                                break;
+                            }
 
+                            // Pipeline execution is redirected to a named stage
                             FlowControl::Goto(next_stage) => {
-                                println!("Going to {}", next_stage);
-
+                                info!("Flow control redirection to stage \"{}\"", next_stage);
                                 match self.stages.iter().position(|stage| match &stage.name {
-                                    Some(name) => name == next_stage,
+                                    Some(name) => next_stage.eq(name),
                                     _ => false,
                                 }) {
                                     Some(pos) => idx = pos,
-                                    None => return Err(ScrapeError::MissingPipelineStage(next_stage.clone())),
+                                    None => return Err(ScrapeError::MissingPipelineStage),
                                 }
                             }
 
+                            // Current pipeline stage execution is repeated after an optional delay
                             FlowControl::Repeat { delay } => {
-                                println!("Repeating stage with delay {:?}", delay);
+                                match delay {
+                                    Some(x) => info!("Repeating stage after {} seconds", x),
+                                    None => info!("Repeating stage immediately"),
+                                };
 
                                 if let Some(delay) = *delay {
                                     sleep(Duration::from_secs_f64(delay)).await;
                                 }
-
-                                // Current stage index remains the same to repeat the stage
                             }
                         };
                     }
@@ -119,11 +132,11 @@ pub enum ScrapeError {
     MissingElement,
     MissingUrl,
     MissingQuery,
-    MissingPipelineStage(String),
-    SetModelAttributeError(String),
+    MissingPipelineStage,
+    SetModelAttributeError,
+    TestError,
     WebdriverConnectionError(NewSessionError),
     WebdriverCommandError(CmdError),
-    TestError,
 }
 
 impl Display for ScrapeError {
@@ -149,12 +162,16 @@ impl Display for ScrapeError {
                 write!(fmt, "missing element query")
             }
 
-            ScrapeError::MissingPipelineStage(stage) => {
-                write!(fmt, "missing pipeline stage {}", stage)
+            ScrapeError::MissingPipelineStage => {
+                write!(fmt, "missing specified pipeline stage")
             }
 
-            ScrapeError::SetModelAttributeError(attribute) => {
-                write!(fmt, "failed to populate model attribute {}", attribute)
+            ScrapeError::SetModelAttributeError => {
+                write!(fmt, "failed to populate model attribute")
+            }
+
+            ScrapeError::TestError => {
+                write!(fmt, "test error")
             }
 
             ScrapeError::WebdriverConnectionError(error) => {
@@ -163,10 +180,6 @@ impl Display for ScrapeError {
 
             ScrapeError::WebdriverCommandError(error) => {
                 write!(fmt, "webdriver command error: {}", error)
-            }
-
-            ScrapeError::TestError => {
-                write!(fmt, "test error")
             }
         }
     }

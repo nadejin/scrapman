@@ -21,7 +21,7 @@ impl OpenUrl {
 
 impl Display for OpenUrl {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> FormatResult {
-        write!(fmt, "OpenUrl({})", self.url)
+        write!(fmt, "open URL with the value from {}", self.url)
     }
 }
 

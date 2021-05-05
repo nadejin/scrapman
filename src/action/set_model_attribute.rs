@@ -25,7 +25,11 @@ impl SetModelAttribute {
 
 impl Display for SetModelAttribute {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> FormatResult {
-        write!(fmt, "SetModelAttribute({}, {})", self.attribute, self.value)
+        write!(
+            fmt,
+            "set model attribute \"{}\" with the value from {}",
+            self.attribute, self.value
+        )
     }
 }
 
@@ -37,6 +41,6 @@ impl ScrapeAction for SetModelAttribute {
         context
             .model
             .dot_set(&self.attribute, value)
-            .map_err(|_| ScrapeError::SetModelAttributeError(self.attribute.clone()))
+            .map_err(|_| ScrapeError::SetModelAttributeError)
     }
 }

@@ -20,7 +20,7 @@ impl Pause {
 
 impl Display for Pause {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> FormatResult {
-        write!(fmt, "Pause")
+        write!(fmt, "pause pipeline execution for {} seconds", self.duration)
     }
 }
 

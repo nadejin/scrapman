@@ -15,5 +15,5 @@ chromedriver --port=4444
 Run example scraping application:
 
 ```
-cargo run --example cian
+RUST_LOG=info cargo run --example cian
 ```

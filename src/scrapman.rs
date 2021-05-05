@@ -1,9 +1,10 @@
-use crate::value::JsonValue;
 use crate::{
     client::ScrapeClient,
     pipeline::{ScrapeContext, ScrapeError, ScrapePipeline},
+    value::JsonValue,
 };
 use fantoccini::ClientBuilder;
+use log::info;
 
 pub type ScrapeResult = Result<ScrapeContext, ScrapeError>;
 
@@ -41,6 +42,7 @@ impl Scrapman {
         Client: ScrapeClient + 'static,
     {
         let mut context = ScrapeContext::new(client, values);
+        info!("Launching pipeline execution");
         pipeline.execute(&mut context).await?;
         context.client.disconnect().await?;
         Ok(context)

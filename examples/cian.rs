@@ -1,3 +1,4 @@
+use log::error;
 use scrapman::{
     ClickElement, FillElement, FlowControl, JsonValue, OpenUrl, QueryElement, ScrapePipeline, ScrapeStage, Scrapman,
     Selector, SetModelAttribute, StoreModel, Value,
@@ -6,6 +7,8 @@ use std::{error::Error, fs::read_to_string};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    pretty_env_logger::init_timed();
+
     let values = serde_yaml::from_str::<JsonValue>(&read_to_string("data/cian.yaml")?)?;
 
     let pipeline = ScrapePipeline::default()
@@ -60,13 +63,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .on_any_error(FlowControl::goto("QueryCards")),
         );
 
-    println!("{}", serde_yaml::to_string(&pipeline)?);
-
     let scrapman = Scrapman::new("http://localhost:4444");
 
     match scrapman.launch(pipeline, values).await {
-        Ok(ctx) => println!("Done"),
-        Err(error) => println!("Error: {}", error),
+        Ok(ctx) => (),
+        Err(error) => error!("Error: {}", error),
     };
 
     Ok(())

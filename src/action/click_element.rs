@@ -11,7 +11,7 @@ pub struct ClickElement;
 
 impl Display for ClickElement {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> FormatResult {
-        write!(fmt, "ClickElement")
+        write!(fmt, "click the current element")
     }
 }
 

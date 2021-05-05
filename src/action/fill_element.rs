@@ -20,7 +20,7 @@ impl FillElement {
 
 impl<'a> Display for FillElement {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> FormatResult {
-        write!(fmt, "FillElement({})", self.value)
+        write!(fmt, "fill the current element with the value from {}", self.value)
     }
 }
 

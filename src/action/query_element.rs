@@ -5,6 +5,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use fantoccini::{elements::Element, Locator};
+use log::error;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter, Result as FormatResult};
 
@@ -72,8 +73,8 @@ impl Display for QueryElement {
     fn fmt(&self, fmt: &mut Formatter<'_>) -> FormatResult {
         write!(
             fmt,
-            "QueryElement({:?}, {}, {:?})",
-            self.selector, self.query, self.scope
+            "query element with {:?} selector in {:?} scope with the query value from {}",
+            self.selector, self.scope, self.query
         )
     }
 }
@@ -109,10 +110,8 @@ impl ScrapeAction for QueryElement {
                 context.current_element = Some(element.clone());
 
                 // Nested pipeline execution launch
-                let _res = pipeline.execute(&mut context).await;
-                // TODO: process errors in nested pipeline
-                if let Err(error) = _res {
-                    println!("!! Nested pipeline error: {}", error);
+                if let Err(error) = pipeline.execute(&mut context).await {
+                    error!("Nested pipeline execution error: {}", error);
                 }
 
                 // Current element set to the last element in the sequence
